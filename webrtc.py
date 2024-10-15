@@ -70,7 +70,6 @@ class PlayerStreamTrack(MediaStreamTrack):
                 print('audio start:', self._start)
             return self._timestamp, AUDIO_TIME_BASE
 
-    # 生成的视频/音频帧接收和处理并返回给下一步处理
     async def recv(self) -> Union[Frame, Packet]:
         self._player._start(self)
         frame = await self._queue.get()

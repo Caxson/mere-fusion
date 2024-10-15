@@ -64,6 +64,7 @@ names_array = [
     'toothbrush'
 ]
 
+
 # 将字符串转换为布尔值的辅助函数
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -151,6 +152,7 @@ def detect(image):
         video_produce(person_text)
     return image
 
+
 # 处理视频文件
 def processvideo(file):
     cap = cv2.VideoCapture(file)
@@ -172,29 +174,48 @@ def processvideo(file):
 width = 1920
 height = 1080
 
+
+class YoloOpencvProcessor:
+    def __init__(self):
+        self.frame_counter = 0  # 每个会话独立的计数器
+
+    def process_frame(self, frame):
+        if frame is not None:
+            if int(args.framelimit) > 0 and self.frame_counter > int(args.framestart) + int(args.framelimit):
+                return
+            if self.frame_counter % int(args.fpsthrottle) == 0:
+                image = frame.to_ndarray(format="bgr24")
+                if len(image) == 0:
+                    logging.info('Frame error in frame is null!')
+                    return
+                detect(image)
+                logging.info(f'Detecting objects in frame {self.frame_counter}')
+
+            # 每次调用时计数器增加
+            self.frame_counter += 1
+
+
 def yolo_opencv_main():
     # 主函数逻辑，根据输入类型选择处理方式
     if args.input.startswith('rtp'):
-
-        logging.info('Starting video capture')
+        logging.info('Starting RTP video capture')
         pipe = subprocess.Popen(command, stdout=subprocess.PIPE, bufsize=10 ** 2)
-        frame_counter = 0
+        counter = 0
         while (True):
             raw_image = pipe.stdout.read(width * height * 3)
             if len(raw_image) == 0:
-                logging.info('Frame error in frame ' + str(frame_counter))
+                logging.info('Frame error in rtp ' + str(counter))
                 break
-            if int(args.framelimit) > 0 and frame_counter > int(args.framestart) + int(args.framelimit):
+            if int(args.framelimit) > 0 and counter > int(args.framestart) + int(args.framelimit):
                 break
 
-            if frame_counter % int(args.fpsthrottle) == 0:
+            if counter % int(args.fpsthrottle) == 0:
                 image = np.frombuffer(raw_image, dtype='uint8').reshape((height, width, 3))
                 detect(image)
-                logging.info('Detecting objects in frame ' + str(frame_counter))
+                logging.info('Detecting objects in rtp ' + str(counter))
             # else:
             #     logging.info('FPS throttling. Skipping frame ' + str(frame_counter))
-            frame_counter = frame_counter + 1
-
+            counter = counter + 1
     else:
         if os.path.isdir(args.input):
             for dirpath, dirnames, filenames in os.walk(args.input):

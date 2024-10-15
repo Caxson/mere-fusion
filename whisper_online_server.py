@@ -53,7 +53,61 @@ class Connection:
         return r
 
 
-class ServerProcessor:
+class WhisperRTCServerProcessor:
+    def __init__(self, online_asr_proc, min_chunk):
+        # self.connection = Connection(sock)
+        self.online_asr_proc = online_asr_proc
+        self.min_chunk = min_chunk
+        self.last_end = None
+        self.chunk_count = 0
+
+    def receive_audio_chunk(self, raw_bytes):
+        out = []
+        while sum(len(x) for x in out) < self.min_chunk * SAMPLING_RATE:
+            if not raw_bytes:
+                break
+            with io.BytesIO(raw_bytes) as raw_io:
+                with sf.SoundFile(raw_io, channels=1, samplerate=SAMPLING_RATE,
+                                  subtype='PCM_16', format='RAW') as sound_file:
+                    audio, _ = librosa.load(sound_file, sr=SAMPLING_RATE, dtype=np.float32)
+                    out.append(audio)
+        if not out:
+            return None
+        return np.concatenate(out)
+
+    def format_output_transcript(self, o):
+        if o[0] is not None:
+            beg, end = o[0] * 1000, o[1] * 1000
+            if self.last_end is not None:
+                beg = max(beg, self.last_end)
+            self.last_end = end
+            print("%1.0f %1.0f %s" % (beg, end, o[2]), flush=True, file=sys.stderr)
+            return "%1.0f %1.0f %s" % (beg, end, o[2])
+        else:
+            logger.debug("No text in this segment")
+            return None
+
+    def send_result(self, o):
+        msg = self.format_output_transcript(o)
+        if msg is not None:
+            # 将分析结果发送给消费者
+            text_produce(msg)
+            logger.info(f"res_msg: {msg}")
+        else:
+            logger.warning(f"No text in this segment")
+
+    def process(self, raw_bytes):
+        self.online_asr_proc.init()
+        logger.info("##### 音频接收成功 #####")
+        a = self.receive_audio_chunk(raw_bytes)
+        if a is None:
+            return None
+        self.online_asr_proc.insert_audio_chunk(a)
+        o = self.online_asr_proc.process_iter()
+        self.send_result(o)
+
+
+class WhisperRTPServerProcessor:
     def __init__(self, online_asr_proc, min_chunk):
         # self.connection = Connection(sock)
         self.online_asr_proc = online_asr_proc
@@ -165,10 +219,10 @@ def whisper_main():
     else:
         logger.warning(msg)
 
-    #音频处理服务启动
+    # 音频处理服务启动
     while True:
         logger.info("whisper server waiting for a connection")
-        proc = ServerProcessor(online, min_chunk)
+        proc = WhisperRTPServerProcessor(online, min_chunk)
         proc.process()
 
     logger.info('Whisper Server Connection closed, terminating.')

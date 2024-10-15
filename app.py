@@ -1,28 +1,34 @@
 # 主函数
 import asyncio
+import io
 import json
 import logging
 import subprocess
+
+import librosa
 from dotenv import load_dotenv
 from flask import Flask
 from flask_sockets import Sockets
 
 from stream_openai_video import stream_out_video_main
-from whisper_online_server import whisper_main
-from yolo_opencv import yolo_opencv_main
+from whisper_online_server import whisper_main, WhisperRTCServerProcessor
+from yolo_opencv import yolo_opencv_main, YoloOpencvProcessor
 from aiohttp import web
 import aiohttp
 import aiohttp_cors
-from aiortc import RTCPeerConnection, RTCSessionDescription
+import soundfile as sf
+from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 from aiortc.rtcrtpsender import RTCRtpSender
 from webrtc import HumanPlayer
+import multiprocessing
+import argparse
 
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 sockets = Sockets(app)
-nerfreals = []
-statreals = []
+session_ids = []
+session_resources = []
 
 
 @sockets.route('/msg_text')
@@ -72,18 +78,27 @@ async def offer(request):
     params = await request.json()
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
 
-    sessionid = len(nerfreals)
-    for index, value in enumerate(statreals):
+    session_id = len(session_ids)
+    for index, value in enumerate(session_resources):
         if value == 0:
-            sessionid = index
+            session_id = index
             break
-    if sessionid >= len(nerfreals):
+    if session_id >= len(session_ids):
         print('reach max session')
         return -1
-    statreals[sessionid] = 1
+    session_resources[session_id] = 1
 
     pc = RTCPeerConnection()
     pcs.add(pc)
+
+    # Monitor the input of video and audio streams
+
+    session = UserSession(session_id, pc)
+
+    @pc.on("track")
+    async def on_track(track):
+        """根据轨道类型，将轨道添加到会话中"""
+        session.add_track(track)
 
     @pc.on("connectionstatechange")
     async def on_connectionstatechange():
@@ -91,12 +106,12 @@ async def offer(request):
         if pc.connectionState == "failed":
             await pc.close()
             pcs.discard(pc)
-            statreals[sessionid] = 0
+            session_resources[session_id] = 0
         if pc.connectionState == "closed":
             pcs.discard(pc)
-            statreals[sessionid] = 0
+            session_resources[session_id] = 0
 
-    player = HumanPlayer(nerfreals[sessionid])
+    player = HumanPlayer(session_ids[session_id])
     audio_sender = pc.addTrack(player.audio)
     video_sender = pc.addTrack(player.video)
     capabilities = RTCRtpSender.getCapabilities("video")
@@ -114,7 +129,7 @@ async def offer(request):
     return web.Response(
         content_type="application/json",
         text=json.dumps(
-            {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type, "sessionid": sessionid}
+            {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type, "sessionid": session_id}
         ),
     )
 
@@ -124,13 +139,13 @@ async def human(request):
 
     sessionid = params.get('sessionid', 0)
     if params.get('interrupt'):
-        nerfreals[sessionid].pause_talk()
+        session_ids[sessionid].pause_talk()
 
     if params['type'] == 'echo':
-        nerfreals[sessionid].put_msg_txt(params['text'])
+        session_ids[sessionid].put_msg_txt(params['text'])
     elif params['type'] == 'chat':
         res = await asyncio.get_event_loop().run_in_executor(None, llm_response(params['text']))
-        nerfreals[sessionid].put_msg_txt(res)
+        session_ids[sessionid].put_msg_txt(res)
 
     return web.Response(
         content_type="application/json",
@@ -144,7 +159,7 @@ async def set_audiotype(request):
     params = await request.json()
 
     sessionid = params.get('sessionid', 0)
-    nerfreals[sessionid].set_curr_state(params['audiotype'], params['reinit'])
+    session_ids[sessionid].set_curr_state(params['audiotype'], params['reinit'])
 
     return web.Response(
         content_type="application/json",
@@ -159,15 +174,69 @@ async def record(request):
 
     sessionid = params.get('sessionid', 0)
     if params['type'] == 'start_record':
-        nerfreals[sessionid].start_recording("data/record_lasted.mp4")
+        session_ids[sessionid].start_recording("data/record_lasted.mp4")
     elif params['type'] == 'end_record':
-        nerfreals[sessionid].stop_recording()
+        session_ids[sessionid].stop_recording()
     return web.Response(
         content_type="application/json",
         text=json.dumps(
             {"code": 0, "data": "ok"}
         ),
     )
+
+
+class UserSession:
+    """每个用户会话的封装类"""
+
+    def __init__(self, session_id, pc):
+        self.session_id = session_id
+        self.pc = pc
+        self.video_buffer = []  # 用于存储视频帧的缓冲区
+
+    def add_track(self, track):
+        """根据轨道类型添加处理逻辑"""
+        if track.kind == "audio":
+            logging.info(f"会话 {self.session_id}: 接收到音频轨道")
+            self.pc.addTrack(AudioStreamTrack(track))
+        elif track.kind == "video":
+            logging.info(f"会话 {self.session_id}: 接收到视频轨道")
+            self.pc.addTrack(VideoStreamTrack(track))
+
+
+class AudioStreamTrack(MediaStreamTrack):
+    """处理音频流数据"""
+
+    kind = "audio"
+
+    def __init__(self, track):
+        super().__init__()
+        self.track = track
+        self.buffer = []
+        self.processor = WhisperRTCServerProcessor()
+
+    async def recv(self):
+        frame = await self.track.recv()
+        raw_bytes = frame.to_bytes()
+        self.processor.process(raw_bytes)
+        return frame
+
+
+class VideoStreamTrack(MediaStreamTrack):
+    """处理视频流数据"""
+
+    kind = "video"
+
+    def __init__(self, track):
+        super().__init__()
+        self.track = track
+        # 为每个会话创建独立的处理器
+        self.processor = YoloOpencvProcessor()
+
+    async def recv(self):
+        frame = await self.track.recv()
+        # 在每一帧调用时
+        self.processor.process_frame(frame)
+        return frame
 
 
 async def on_shutdown(app):
@@ -196,7 +265,7 @@ async def run(push_url):
             await pc.close()
             pcs.discard(pc)
 
-    player = HumanPlayer(nerfreals[0])
+    player = HumanPlayer(session_ids[0])
     audio_sender = pc.addTrack(player.audio)
     video_sender = pc.addTrack(player.video)
 
@@ -381,9 +450,9 @@ if __name__ == "__main__":
     opt = parser.parse_args()
 
     # 音频输入识别主函数
-    whisper_main()
+    # whisper_main()
     # 视频输入识别主函数
-    # yolo_opencv_main()
+    yolo_opencv_main()
     # 流式处理和输出主函数
     nerfreal = stream_out_video_main(opt)
 
