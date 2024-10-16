@@ -7,6 +7,8 @@ import os.path
 # pip install opencv-python
 import cv2
 import argparse
+
+import easyocr
 import numpy as np
 # import imageio_ffmpeg as imageio
 from ultralytics import YOLO
@@ -64,6 +66,20 @@ names_array = [
     'toothbrush'
 ]
 
+class OCRDetector:
+    def __init__(self, languages=None):
+        if languages is None:
+            languages = ['en', 'zh']
+        self.reader = easyocr.Reader(languages)
+
+    def detect_text(self, image_path):
+        results = self.reader.readtext(image_path)
+        return results
+
+    def print_detected_text(self, image_path):
+        results = self.detect_text(image_path)
+        for (bbox, text, prob) in results:
+            print(f"Detected text: {text} (Confidence: {prob})")
 
 # 将字符串转换为布尔值的辅助函数
 def str2bool(v):
@@ -85,7 +101,7 @@ def get_output_layers(net):
 
 
 # 检测函数，使用YOLO模型进行对象检测
-def detect(image):
+def detect(image, ocr_detector):
     # Perform object detection on the input image
     results = model(image)
 
@@ -101,6 +117,7 @@ def detect(image):
     # The ultralytics library already performs NMS by default, so this may not be necessary.
     # 根据是否包含人脸决定是否调用人像识别函数
     containsPerson = True
+    containsText = True
     # 初始化一个字典来存储物体名称及其数量
     detected_objects = {}
 
@@ -150,6 +167,10 @@ def detect(image):
             logging.info("------------------------")
         # 将检测的人像汇总发送到队列
         video_produce(person_text)
+
+    if containsText:
+        results = ocr_detector.detect_text(image)
+        video_produce(f"监测到的文本：{results}")
     return image
 
 
@@ -157,13 +178,14 @@ def detect(image):
 def processvideo(file):
     cap = cv2.VideoCapture(file)
     frame_counter = 0
+    ocr_detector = OCRDetector()
     while (cap.isOpened()):
         frame_counter = frame_counter + 1
         ret, frame = cap.read()
         logging.info('Detecting objects in frame ' + str(frame_counter))
         if ret == True:
             if not frame is None:
-                detect(frame)
+                detect(frame, ocr_detector)
             else:
                 logging.info('Frame error in frame ' + str(frame_counter))
         else:
@@ -178,6 +200,7 @@ height = 1080
 class YoloOpencvProcessor:
     def __init__(self):
         self.frame_counter = 0  # 每个会话独立的计数器
+        self.ocr_detector = OCRDetector()
 
     def process_frame(self, frame):
         if frame is not None:
@@ -188,7 +211,7 @@ class YoloOpencvProcessor:
                 if len(image) == 0:
                     logging.info('Frame error in frame is null!')
                     return
-                detect(image)
+                detect(image, self.ocr_detector)
                 logging.info(f'Detecting objects in frame {self.frame_counter}')
 
             # 每次调用时计数器增加
@@ -201,6 +224,7 @@ def yolo_opencv_main():
         logging.info('Starting RTP video capture')
         pipe = subprocess.Popen(command, stdout=subprocess.PIPE, bufsize=10 ** 2)
         counter = 0
+        ocr_detector = OCRDetector()
         while (True):
             raw_image = pipe.stdout.read(width * height * 3)
             if len(raw_image) == 0:
@@ -211,7 +235,7 @@ def yolo_opencv_main():
 
             if counter % int(args.fpsthrottle) == 0:
                 image = np.frombuffer(raw_image, dtype='uint8').reshape((height, width, 3))
-                detect(image)
+                detect(image, ocr_detector)
                 logging.info('Detecting objects in rtp ' + str(counter))
             # else:
             #     logging.info('FPS throttling. Skipping frame ' + str(frame_counter))

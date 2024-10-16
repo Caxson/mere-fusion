@@ -13,6 +13,7 @@ openai
 python-dotenv
 accelerate
 pyaudio
+easyocr
 
 #museTalk
 diffusers
