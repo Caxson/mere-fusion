@@ -22,9 +22,9 @@ jobs:
     - name: Create and activate Conda environment
       run: |
         conda create -n myenv python=3.10 -y
-        echo "source activate myenv" >> $GITHUB_ENV
     - name: Install dependencies
       run: |
+        source activate myenv
         conda install pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch
         pip install -r requirements.txt
     - name: Lint with flake8
