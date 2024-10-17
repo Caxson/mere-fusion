@@ -25,11 +25,11 @@ jobs:
     - name: Install dependencies
       run: |
         source activate myenv
-        conda install pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch
-        pip install -r requirements.txt
+        conda install pytorch==1.12.1 torchvision==0.13.1 cudatoolkit=11.3 -c pytorch -y
+        pip install -r requirements.txt -y
     - name: Lint with flake8
       run: |
-        conda install flake8
+        conda install flake8 -y
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
