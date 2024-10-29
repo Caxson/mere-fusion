@@ -69,7 +69,7 @@ names_array = [
 class OCRDetector:
     def __init__(self, languages=None):
         if languages is None:
-            languages = ['en', 'zh']
+            languages = ['en', 'ch_sim']
         self.reader = easyocr.Reader(languages)
 
     def detect_text(self, image_path):

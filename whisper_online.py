@@ -262,8 +262,8 @@ class InsanelyFastWhisperASR(ASRBase):
             "automatic-speech-recognition",
             model="openai/whisper-large-v2",
             torch_dtype=torch.float16,
-            device="mps",
-            # device="cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu",
+            # device="mps",
+            device="cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu",
             model_kwargs={"attn_implementation": "flash_attention_2"} if is_flash_attn_2_available() else {
                 "attn_implementation": "sdpa"},
         )
