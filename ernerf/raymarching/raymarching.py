@@ -17,7 +17,7 @@ except ImportError:
 
 class _near_far_from_aabb(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32)
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     def forward(ctx, rays_o, rays_d, aabb, min_near=0.2):
         ''' near_far_from_aabb, CUDA implementation
         Calculate rays' intersection time (near and far) with aabb
@@ -50,7 +50,7 @@ near_far_from_aabb = _near_far_from_aabb.apply
 
 class _sph_from_ray(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32)
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     def forward(ctx, rays_o, rays_d, radius):
         ''' sph_from_ray, CUDA implementation
         get spherical coordinate on the background sphere from rays.
@@ -126,7 +126,7 @@ morton3D_invert = _morton3D_invert.apply
 
 class _packbits(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32)
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     def forward(ctx, grid, thresh, bitfield=None):
         ''' packbits, CUDA implementation
         Pack up the density grid into a bit field to accelerate ray marching.
@@ -155,7 +155,7 @@ packbits = _packbits.apply
 
 class _morton3D_dilation(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32)
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     def forward(ctx, grid):
         ''' max pooling with morton coord, CUDA implementation
         or maybe call it dilation... we don't support adjust kernel size.
@@ -184,7 +184,7 @@ morton3D_dilation = _morton3D_dilation.apply
 
 class _march_rays_train(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32)
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     def forward(ctx, rays_o, rays_d, bound, density_bitfield, C, H, nears, fars, step_counter=None, mean_count=-1, perturb=False, align=-1, force_all_rays=False, dt_gamma=0, max_steps=1024):
         ''' march rays to generate points (forward only)
         Args:
@@ -281,7 +281,7 @@ march_rays_train = _march_rays_train.apply
 
 class _composite_rays_train(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32)
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     def forward(ctx, sigmas, rgbs, ambient, deltas, rays, T_thresh=1e-4):
         ''' composite rays' rgbs, according to the ray marching formula.
         Args:
@@ -345,7 +345,7 @@ composite_rays_train = _composite_rays_train.apply
 
 class _march_rays(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32)
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     def forward(ctx, n_alive, n_step, rays_alive, rays_t, rays_o, rays_d, bound, density_bitfield, C, H, near, far, align=-1, perturb=False, dt_gamma=0, max_steps=1024):
         ''' march rays to generate points (forward only, for inference)
         Args:
@@ -399,7 +399,7 @@ march_rays = _march_rays.apply
 
 class _composite_rays(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32) # need to cast sigmas & rgbs to float
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda') # need to cast sigmas & rgbs to float
     def forward(ctx, n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, deltas, weights_sum, depth, image, T_thresh=1e-2):
         ''' composite rays' rgbs, according to the ray marching formula. (for inference)
         Args:
@@ -424,7 +424,7 @@ composite_rays = _composite_rays.apply
 
 class _composite_rays_ambient(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32) # need to cast sigmas & rgbs to float
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda') # need to cast sigmas & rgbs to float
     def forward(ctx, n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, deltas, ambients, weights_sum, depth, image, ambient_sum, T_thresh=1e-2):
         _backend.composite_rays_ambient(n_alive, n_step, T_thresh, rays_alive, rays_t, sigmas, rgbs, deltas, ambients, weights_sum, depth, image, ambient_sum)
         return tuple()
@@ -440,7 +440,7 @@ composite_rays_ambient = _composite_rays_ambient.apply
 
 class _composite_rays_train_sigma(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32)
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     def forward(ctx, sigmas, rgbs, ambient, deltas, rays, T_thresh=1e-4):
         ''' composite rays' rgbs, according to the ray marching formula.
         Args:
@@ -501,7 +501,7 @@ composite_rays_train_sigma = _composite_rays_train_sigma.apply
 
 class _composite_rays_ambient_sigma(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32) # need to cast sigmas & rgbs to float
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda') # need to cast sigmas & rgbs to float
     def forward(ctx, n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, deltas, ambients, weights_sum, depth, image, ambient_sum, T_thresh=1e-2):
         _backend.composite_rays_ambient_sigma(n_alive, n_step, T_thresh, rays_alive, rays_t, sigmas, rgbs, deltas, ambients, weights_sum, depth, image, ambient_sum)
         return tuple()
@@ -514,7 +514,7 @@ composite_rays_ambient_sigma = _composite_rays_ambient_sigma.apply
 # uncertainty
 class _composite_rays_train_uncertainty(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32)
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     def forward(ctx, sigmas, rgbs, ambient, uncertainty, deltas, rays, T_thresh=1e-4):
         ''' composite rays' rgbs, according to the ray marching formula.
         Args:
@@ -579,7 +579,7 @@ composite_rays_train_uncertainty = _composite_rays_train_uncertainty.apply
 
 class _composite_rays_uncertainty(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32) # need to cast sigmas & rgbs to float
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda') # need to cast sigmas & rgbs to float
     def forward(ctx, n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, deltas, ambients, uncertainties, weights_sum, depth, image, ambient_sum, uncertainty_sum, T_thresh=1e-2):
         _backend.composite_rays_uncertainty(n_alive, n_step, T_thresh, rays_alive, rays_t, sigmas, rgbs, deltas, ambients, uncertainties, weights_sum, depth, image, ambient_sum, uncertainty_sum)
         return tuple()
@@ -592,7 +592,7 @@ composite_rays_uncertainty = _composite_rays_uncertainty.apply
 # triplane(eye)
 class _composite_rays_train_triplane(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32)
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda')
     def forward(ctx, sigmas, rgbs, amb_aud, amb_eye, uncertainty, deltas, rays, T_thresh=1e-4):
         ''' composite rays' rgbs, according to the ray marching formula.
         Args:
@@ -661,7 +661,7 @@ composite_rays_train_triplane = _composite_rays_train_triplane.apply
 
 class _composite_rays_triplane(Function):
     @staticmethod
-    @custom_fwd(cast_inputs=torch.float32) # need to cast sigmas & rgbs to float
+    @torch.amp.custom_fwd(cast_inputs=torch.float32, device_type='cuda') # need to cast sigmas & rgbs to float
     def forward(ctx, n_alive, n_step, rays_alive, rays_t, sigmas, rgbs, deltas, ambs_aud, ambs_eye, uncertainties, weights_sum, depth, image, amb_aud_sum, amb_eye_sum, uncertainty_sum, T_thresh=1e-2):
         _backend.composite_rays_triplane(n_alive, n_step, T_thresh, rays_alive, rays_t, sigmas, rgbs, deltas, ambs_aud, ambs_eye, uncertainties, weights_sum, depth, image, amb_aud_sum, amb_eye_sum, uncertainty_sum)
         return tuple()

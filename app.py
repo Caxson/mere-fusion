@@ -289,7 +289,6 @@ def run_server(runner):
 
 if __name__ == "__main__":
     # 加载 .env 文件中的环境变量，例如 API 密钥
-    load_dotenv()
     multiprocessing.set_start_method('spawn')
     parser = argparse.ArgumentParser()
     parser.add_argument('--pose', type=str, default="data/data_kf.json", help="transforms.json, pose source")
@@ -438,7 +437,7 @@ if __name__ == "__main__":
     # parser.add_argument('--CHARACTER', type=str, default='test')
     # parser.add_argument('--EMOTION', type=str, default='default')
 
-    parser.add_argument('--model', type=str, default='musetalk')  # musetalk wav2lip
+    parser.add_argument('--model', type=str, default='ernerf')  # ernerf musetalk wav2lip
 
     parser.add_argument('--transport', type=str, default='rtcpush')  # rtmp webrtc rtcpush
     parser.add_argument('--push_url', type=str,
@@ -452,7 +451,7 @@ if __name__ == "__main__":
     # 音频输入识别主函数
     # whisper_main()
     # 视频输入识别主函数
-    yolo_opencv_main()
+    # yolo_opencv_main()
     # 流式处理和输出主函数
     nerfreal = stream_out_video_main(opt)
 

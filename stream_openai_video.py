@@ -10,6 +10,7 @@ import logging
 import cv2
 import openai
 import pyaudio
+from dotenv import load_dotenv
 from flask import Flask
 from flask_sockets import Sockets
 
@@ -58,8 +59,10 @@ PROMPT_OPTIONS = {
 
 PROMPT_TO_USE = f"{PROMPT_OPTIONS['getty']}. {AUDIO_FRIENDLY_INSTRUCTION}"
 
+load_dotenv()
+
 # 初始化 OpenAI 客户端，使用环境变量中的 OPENAI_API_KEY
-OPENAI_CLIENT = openai.OpenAI()
+OPENAI_CLIENT = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # 全局停止事件，用于管理线程的结束
 stop_event = threading.Event()

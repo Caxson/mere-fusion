@@ -35,7 +35,7 @@ asr, online = asr_factory(args)
 min_chunk = 1
 args.warmup_file = "data/whisper/whisper.wav"
 
-logger.info("Starting Whisper server on port {}".format(args.port))
+logger.info("Starting Whisper server on port")
 
 ######### Server objects
 
