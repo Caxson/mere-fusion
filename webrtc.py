@@ -109,7 +109,7 @@ def player_worker_thread(
 class HumanPlayer:
 
     def __init__(
-            self, nerfreal, format=None, options=None, timeout=None, loop=False, decode=True
+            self, model, format=None, options=None, timeout=None, loop=False, decode=True
     ):
         self.__thread: Optional[threading.Thread] = None
         self.__thread_quit: Optional[threading.Event] = None
@@ -122,7 +122,7 @@ class HumanPlayer:
         self.__audio = PlayerStreamTrack(self, kind="audio")
         self.__video = PlayerStreamTrack(self, kind="video")
 
-        self.__container = nerfreal
+        self.__container = model
 
     @property
     def audio(self) -> MediaStreamTrack:

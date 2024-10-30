@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from whisper_online import *
-from stream_openai_video import text_produce
+from stream_openai_video import OpenAISessionManager
 
 import argparse
 import os
@@ -54,16 +54,18 @@ class Connection:
 
 
 class WhisperRTCServerProcessor:
-    def __init__(self, online_asr_proc, min_chunk):
+    def __init__(self, session_id, min_chunk_r):
         # self.connection = Connection(sock)
-        self.online_asr_proc = online_asr_proc
-        self.min_chunk = min_chunk
+        self.online_asr_proc = online
+        self.session_id = session_id
+        self.min_chunk_r = min_chunk_r
         self.last_end = None
         self.chunk_count = 0
+        self.session_manger = OpenAISessionManager(session_id)
 
     def receive_audio_chunk(self, raw_bytes):
         out = []
-        while sum(len(x) for x in out) < self.min_chunk * SAMPLING_RATE:
+        while sum(len(x) for x in out) < self.min_chunk_r * SAMPLING_RATE:
             if not raw_bytes:
                 break
             with io.BytesIO(raw_bytes) as raw_io:
@@ -91,7 +93,7 @@ class WhisperRTCServerProcessor:
         msg = self.format_output_transcript(o)
         if msg is not None:
             # 将分析结果发送给消费者
-            text_produce(msg)
+            self.session_manger.text_produce(msg)
             logger.info(f"res_msg: {msg}")
         else:
             logger.warning(f"No text in this segment")
@@ -106,6 +108,12 @@ class WhisperRTCServerProcessor:
         o = self.online_asr_proc.process_iter()
         self.send_result(o)
 
+    async def close(self):
+        # TODO
+        # if self.online_asr_proc is not None:
+            # await self.online_asr_proc.close()
+        if self.session_manger is not None:
+            await self.session_manger.close()
 
 class WhisperRTPServerProcessor:
     def __init__(self, online_asr_proc, min_chunk):
@@ -167,7 +175,7 @@ class WhisperRTPServerProcessor:
         msg = self.format_output_transcript(o)
         if msg is not None:
             # 将分析结果发送给消费者
-            text_produce(msg)
+            # text_produce(msg)
             logger.info(f"res_msg: {msg}")
         else:
             logger.warning(f"No text in this segment")

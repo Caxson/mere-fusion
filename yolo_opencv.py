@@ -14,7 +14,7 @@ import numpy as np
 from ultralytics import YOLO
 import subprocess
 from deepface import DeepFace
-from stream_openai_video import video_produce
+from stream_openai_video import OpenAISessionManager
 
 logging.basicConfig(level=logging.INFO)
 
@@ -100,80 +100,6 @@ def get_output_layers(net):
     return output_layers
 
 
-# 检测函数，使用YOLO模型进行对象检测
-def detect(image, ocr_detector):
-    # Perform object detection on the input image
-    results = model(image)
-
-    # Extracting detections
-    boxes = results[0].boxes.xyxy.cpu().numpy()  # Bounding box coordinates
-    confidences = results[0].boxes.conf.cpu().numpy()  # Confidence scores
-    class_ids = results[0].boxes.cls.cpu().numpy().astype(int)  # Class IDs
-
-    # var = results[0].show
-    # logging.info(f'detection results: {var}')
-
-    # Optionally: perform NMS or other post-processing (if needed)
-    # The ultralytics library already performs NMS by default, so this may not be necessary.
-    # 根据是否包含人脸决定是否调用人像识别函数
-    containsPerson = True
-    containsText = True
-    # 初始化一个字典来存储物体名称及其数量
-    detected_objects = {}
-
-    # orgImage = image.copy()
-    for i in range(len(boxes)):
-        x1, y1, x2, y2 = boxes[i]
-        confidence = confidences[i]
-        class_id = class_ids[i]
-        object_name = names_array[class_id]
-
-        logging.info(
-            f"Detected object: Class ID = {class_id},"
-            f"Name = {object_name},"
-            f" Confidence = {confidence:.2f}, "
-            f"Bounding Box = [{round(x1)}, {round(y1)}, {round(x2)}, {round(y2)}]")
-
-        # 更新检测物体的数量
-        if object_name in detected_objects:
-            detected_objects[object_name] += 1
-        else:
-            detected_objects[object_name] = 1
-
-        if class_id == 0:
-            containsPerson = True
-
-    # 将检测到的物体及其数量汇总为文本
-    summary_text = "Detected objects summary:\n"
-    for object_name, count in detected_objects.items():
-        summary_text += f"- {object_name}: {count}\n"
-
-    # 将检测的物体汇总发送到队列
-    video_produce(summary_text)
-
-    if containsPerson:
-        objs = DeepFace.analyze(
-            image,
-            actions=['age', 'gender', 'race', 'emotion'],
-            enforce_detection=False
-        )
-        person_text = "Detected person summary:\n"
-        for person in objs:
-            logging.info(f"Age: {person['age']}")
-            logging.info(f"Gender: {person['gender']}")
-            logging.info(f"Race: {person['race']}")
-            logging.info(f"Emotion: {person['emotion']}")
-            person_text += f"- {person['age']}: {person['gender']} - {person['race']}: {person['emotion']}\n"
-            logging.info("------------------------")
-        # 将检测的人像汇总发送到队列
-        video_produce(person_text)
-
-    if containsText:
-        results = ocr_detector.detect_text(image)
-        video_produce(f"监测到的文本：{results}")
-    return image
-
-
 # 处理视频文件
 def processvideo(file):
     cap = cv2.VideoCapture(file)
@@ -185,7 +111,9 @@ def processvideo(file):
         logging.info('Detecting objects in frame ' + str(frame_counter))
         if ret == True:
             if not frame is None:
-                detect(frame, ocr_detector)
+                # 暂时弃用
+                pass
+                # detect(frame, ocr_detector)
             else:
                 logging.info('Frame error in frame ' + str(frame_counter))
         else:
@@ -198,24 +126,103 @@ height = 1080
 
 
 class YoloOpencvProcessor:
-    def __init__(self):
+    def __init__(self, session_id):
         self.frame_counter = 0  # 每个会话独立的计数器
         self.ocr_detector = OCRDetector()
+        self.session_id = session_id
+        self.image = None
+        self.session_manger = OpenAISessionManager(session_id)
 
     def process_frame(self, frame):
         if frame is not None:
             if int(args.framelimit) > 0 and self.frame_counter > int(args.framestart) + int(args.framelimit):
                 return
             if self.frame_counter % int(args.fpsthrottle) == 0:
-                image = frame.to_ndarray(format="bgr24")
-                if len(image) == 0:
+                self.image = frame.to_ndarray(format="bgr24")
+                if len(self.image) == 0:
                     logging.info('Frame error in frame is null!')
                     return
-                detect(image, self.ocr_detector)
+                self.detect()
                 logging.info(f'Detecting objects in frame {self.frame_counter}')
 
             # 每次调用时计数器增加
             self.frame_counter += 1
+
+    # 检测函数，使用YOLO模型进行对象检测
+    def detect(self):
+        # Perform object detection on the input image
+        results = model(self.image)
+
+        # Extracting detections
+        boxes = results[0].boxes.xyxy.cpu().numpy()  # Bounding box coordinates
+        confidences = results[0].boxes.conf.cpu().numpy()  # Confidence scores
+        class_ids = results[0].boxes.cls.cpu().numpy().astype(int)  # Class IDs
+
+        # var = results[0].show
+        # logging.info(f'detection results: {var}')
+
+        # Optionally: perform NMS or other post-processing (if needed)
+        # The ultralytics library already performs NMS by default, so this may not be necessary.
+        # 根据是否包含人脸决定是否调用人像识别函数
+        containsPerson = True
+        containsText = True
+        # 初始化一个字典来存储物体名称及其数量
+        detected_objects = {}
+
+        # orgImage = image.copy()
+        for i in range(len(boxes)):
+            x1, y1, x2, y2 = boxes[i]
+            confidence = confidences[i]
+            class_id = class_ids[i]
+            object_name = names_array[class_id]
+
+            logging.info(
+                f"Detected object: Class ID = {class_id},"
+                f"Name = {object_name},"
+                f" Confidence = {confidence:.2f}, "
+                f"Bounding Box = [{round(x1)}, {round(y1)}, {round(x2)}, {round(y2)}]")
+
+            # 更新检测物体的数量
+            if object_name in detected_objects:
+                detected_objects[object_name] += 1
+            else:
+                detected_objects[object_name] = 1
+
+            if class_id == 0:
+                containsPerson = True
+
+        # 将检测到的物体及其数量汇总为文本
+        summary_text = "Detected objects summary:\n"
+        for object_name, count in detected_objects.items():
+            summary_text += f"- {object_name}: {count}\n"
+
+        # 将检测的物体汇总发送到队列
+        self.session_manger.video_produce(summary_text)
+
+        if containsPerson:
+            objs = DeepFace.analyze(
+                self.image,
+                actions=['age', 'gender', 'race', 'emotion'],
+                enforce_detection=False
+            )
+            person_text = "Detected person summary:\n"
+            for person in objs:
+                logging.info(f"Age: {person['age']}")
+                logging.info(f"Gender: {person['gender']}")
+                logging.info(f"Race: {person['race']}")
+                logging.info(f"Emotion: {person['emotion']}")
+                person_text += f"- {person['age']}: {person['gender']} - {person['race']}: {person['emotion']}\n"
+                logging.info("------------------------")
+            # 将检测的人像汇总发送到队列
+            self.session_manger.video_produce(person_text)
+
+        if containsText:
+            results = self.ocr_detector.detect_text(self.image)
+            self.session_manger.video_produce(f"监测到的文本：{results}")
+        return self.image
+
+    async def close(self):
+        await self.session_manger.close()
 
 
 def yolo_opencv_main():
@@ -235,7 +242,8 @@ def yolo_opencv_main():
 
             if counter % int(args.fpsthrottle) == 0:
                 image = np.frombuffer(raw_image, dtype='uint8').reshape((height, width, 3))
-                detect(image, ocr_detector)
+                # 暂时弃用
+                # detect(image, ocr_detector)
                 logging.info('Detecting objects in rtp ' + str(counter))
             # else:
             #     logging.info('FPS throttling. Skipping frame ' + str(frame_counter))
