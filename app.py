@@ -80,8 +80,8 @@ async def start_session(request):
             return web.json_response({'code': 1, 'message': 'Maximum number of sessions reached'}, status=429)
 
         # 定义拉流和推流的流 URL，包含 session_id
-        consume_stream_url = f'webrtc://123.56.254.166/live/stream_{session_id}'
-        produce_stream_url = f'webrtc://123.56.254.166/live/processed_stream_{session_id}'
+        consume_stream_url = f'webrtc://<server_ip>/live/stream_{session_id}'
+        produce_stream_url = f'webrtc://<server_ip>/live/processed_stream_{session_id}'
 
         # 创建会话实例
         session_obj = ConnectSession(session_id, consume_stream_url, produce_stream_url)
@@ -698,9 +698,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--transport', type=str, default='rtc')  # rtmp webrtc rtc
     parser.add_argument('--push_url', type=str,
-                        default='http://123.56.254.166:1985/rtc/v1/publish/')  # rtmp://localhost/live/livestream    http://localhost:1985/rtc/v1/whip/?app=live&stream=livestream
+                        default='http://<server_ip>:1985/rtc/v1/publish/')  # rtmp://localhost/live/livestream    http://localhost:1985/rtc/v1/whip/?app=live&stream=livestream
     parser.add_argument('--pull_url', type=str,
-                        default='http://123.56.254.166:1985/rtc/v1/play/')
+                        default='http://<server_ip>:1985/rtc/v1/play/')
 
     parser.add_argument('--max_session', type=int, default=10)  # multi session count
     parser.add_argument('--listen_port', type=int, default=8010)
