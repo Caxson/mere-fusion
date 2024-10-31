@@ -19,7 +19,7 @@ async def process_stream(track: MediaStreamTrack):
 async def handle_publish_signaling(pc_publish: RTCPeerConnection):
     logging.debug("Connecting to SRS WebSocket for publish signaling")
     try:
-        async with websockets.connect('ws://123.56.254.166:1985/rtc/v1/signaling') as websocket:
+        async with websockets.connect('ws://<server_ip>:1985/rtc/v1/signaling') as websocket:
             logging.debug("Connected to SRS WebSocket for publish signaling")
 
             # 等待接收 SDP Offer
@@ -55,7 +55,7 @@ async def handle_publish_signaling(pc_publish: RTCPeerConnection):
 async def handle_play_signaling(pc_play: RTCPeerConnection):
     logging.debug("Connecting to SRS WebSocket for play signaling")
     try:
-        async with websockets.connect('ws://123.56.254.166:1985/rtc/v1/signaling') as websocket:
+        async with websockets.connect('ws://<server_ip>:1985/rtc/v1/signaling') as websocket:
             logging.debug("Connected to SRS WebSocket for play signaling")
 
             # 创建 SDP Offer

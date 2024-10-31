@@ -65,10 +65,10 @@ async def consume_and_produce_stream():
 
     async with ClientSession() as session:
         # 拉流部分
-        play_url = 'http://123.56.254.166:1985/rtc/v1/play/'
+        play_url = 'http://<server_ip>:1985/rtc/v1/play/'
         play_params = {
             'api': play_url,
-            'streamurl': 'webrtc://123.56.254.166/live/stream',
+            'streamurl': 'webrtc://<server_ip>/live/stream',
             'clientip': None,
             'sdp': '',
             'tid': str(random.randint(10000, 99999)),
@@ -122,10 +122,10 @@ async def consume_and_produce_stream():
         # await asyncio.sleep(1)
 
         # 推流部分
-        publish_url = 'http://123.56.254.166:1985/rtc/v1/publish/'
+        publish_url = 'http://<server_ip>:1985/rtc/v1/publish/'
         publish_params = {
             'api': publish_url,
-            'streamurl': 'webrtc://123.56.254.166/live/processed_stream',
+            'streamurl': 'webrtc://<server_ip>/live/processed_stream',
             'clientip': None,
             'sdp': '',
             'tid': str(random.randint(10000, 99999)),
