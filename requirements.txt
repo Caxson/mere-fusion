@@ -30,7 +30,7 @@ spaces
 moviepy
 
 resampy
-edge_tts
+edge_tts>=7.0.0
 face_alignment
 tqdm
 
@@ -57,3 +57,11 @@ flask_sockets
 aiohttp
 aiortc
 aiohttp_cors
+
+# 2026 upgrade engines (optional — install per the engine you enable; see docs/INTEGRATION.md)
+# ASR: FunASR streaming
+funasr
+# Doubao (Volcengine) voice WebSocket
+websockets
+# Note: CosyVoice 2/3, SoulX-FlashHead, EchoMimicV3 are NOT on PyPI —
+#       clone their upstream repos + set PYTHONPATH (see docs/INTEGRATION.md).
