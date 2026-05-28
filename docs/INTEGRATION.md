@@ -139,6 +139,38 @@ answer = vl.understand(user_text, frame=fb.latest())
 
 ---
 
+## 7. 豆包语音（可选高端档）`doubao/`
+
+火山引擎流式 ASR / TTS V3 / 端到端实时对话，三者共用二进制帧协议
+（`doubao/protocol.py`，已单测）。鉴权用 appid + access_token。
+
+```python
+from doubao import DoubaoASR, DoubaoTTS, DoubaoRealtime
+
+# ASR：喂 PCM 16k chunk，收 partial/final
+asr = DoubaoASR(app_id, access_token)        # resource_id 可按套餐覆盖
+async for res in asr.stream(pcm_chunk_aiter):
+    print(res.get("text"))
+
+# TTS V3：流式合成
+tts = DoubaoTTS(app_id, access_token, speaker="zh_female_vv_uranus_bigtts")
+async for audio in tts.synthesize("你好，我是数字人"):
+    play(audio)
+
+# 端到端实时对话（听+想+说一体，类 GPT-4o Realtime）
+rt = DoubaoRealtime(app_id, access_token)
+async for ev in rt.dialog(mic_pcm_aiter):
+    if ev["type"] == "tts_audio": play(ev["data"])
+    elif ev["type"] == "asr":     print("用户:", ev["data"])
+    elif ev["type"] == "chat":    print("豆包:", ev["data"])
+```
+
+> Resource-Id 因套餐而异（ASR `volc.bigasr.sauc.duration`/`.concurrent`、
+> TTS `volc.service_type.10029`/`seed-tts-2.0`），以火山控制台开通的为准，
+> 构造时传参覆盖即可。
+
+---
+
 ## 环境变量一览（见 `.env.example`）
 
 | 变量 | 用途 |
@@ -146,4 +178,5 @@ answer = vl.understand(user_text, frame=fb.latest())
 | `DEEPSEEK_API_KEY` | DeepSeek-V4 LLM |
 | `DASHSCOPE_API_KEY` | Qwen-VL 视觉 |
 | `ECHOMIMIC_V3_DIR` | EchoMimicV3 仓库路径（录视频半身） |
+| `DOUBAO_APPID` / `DOUBAO_ACCESS_TOKEN` | 豆包语音（ASR/TTS/Realtime） |
 | `OPENAI_API_KEY` | 既有 ChatGPT 路径 |
