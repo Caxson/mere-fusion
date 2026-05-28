@@ -159,6 +159,29 @@ async def run_avatar(audio_path: str, avatar_type: str, avatar_image: str, outpu
             print(f"[Avatar] MuseTalk 推理不可用 ({type(e).__name__}: {e})")
             print("[Avatar] 回退: 用 ffmpeg 生成静态图片+音频视频")
             fallback_video(audio_path, avatar_image, output_video)
+    elif avatar_type == "echomimic":
+        print(f"[Avatar] EchoMimicV3 半身推理: {audio_path} → {output_video}")
+        # 录视频最佳：半身+手势。需要本地配好 echomimic_v3 仓库+权重。
+        try:
+            import sys
+            sys.path.insert(
+                0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            )
+            from avatar.echomimic_v3 import EchoMimicV3
+            repo_dir = os.environ.get("ECHOMIMIC_V3_DIR")
+            if not repo_dir:
+                raise RuntimeError("set ECHOMIMIC_V3_DIR to the echomimic_v3 repo path")
+            engine = EchoMimicV3(repo_dir=repo_dir)
+            save_dir = os.path.dirname(os.path.abspath(output_video)) or "."
+            engine.generate(
+                image_path=_first_avatar_image(avatar_image),
+                audio_path=audio_path,
+                save_path=save_dir,
+            )
+        except Exception as e:
+            print(f"[Avatar] EchoMimicV3 不可用 ({type(e).__name__}: {e})")
+            print("[Avatar] 回退: 用 ffmpeg 生成静态图片+音频视频")
+            fallback_video(audio_path, avatar_image, output_video)
     elif avatar_type == "none":
         return audio_path
     else:
@@ -167,22 +190,28 @@ async def run_avatar(audio_path: str, avatar_type: str, avatar_image: str, outpu
     return output_video
 
 
-def fallback_video(audio_path: str, avatar_image: str, output_path: str) -> None:
-    """当 MuseTalk 不可用时，用静态图片 + 音频生成视频"""
-    img_candidates = []
+def _first_avatar_image(avatar_image: str) -> str:
+    """从图片路径或目录里取第一张可用图片。找不到则抛错。"""
+    import glob
+    candidates = []
     if os.path.isdir(avatar_image):
         for ext in ("*.png", "*.jpg", "*.jpeg"):
-            import glob
-            img_candidates.extend(glob.glob(os.path.join(avatar_image, ext)))
+            candidates.extend(glob.glob(os.path.join(avatar_image, ext)))
     elif os.path.isfile(avatar_image):
-        img_candidates = [avatar_image]
+        candidates = [avatar_image]
+    if not candidates:
+        raise FileNotFoundError(f"no avatar image under {avatar_image}")
+    return candidates[0]
 
-    if not img_candidates:
+
+def fallback_video(audio_path: str, avatar_image: str, output_path: str) -> None:
+    """当数字人推理不可用时，用静态图片 + 音频生成视频"""
+    try:
+        img = _first_avatar_image(avatar_image)
+    except FileNotFoundError:
         print("[Avatar] 没有找到头像图片，跳过视频生成")
         shutil.copy(audio_path, output_path.replace(".mp4", ".wav"))
         return
-
-    img = img_candidates[0]
     subprocess.run(
         [
             "ffmpeg", "-y",
@@ -205,7 +234,7 @@ async def main():
     parser.add_argument("--tts", default="edgetts", choices=["edgetts", "cosyvoice"])
     parser.add_argument("--voice", default="zh-CN-YunxiNeural", help="EdgeTTS 音色")
     parser.add_argument("--voice_prompt", default=None, help="CosyVoice 参考音频 (.wav)")
-    parser.add_argument("--avatar", default="none", choices=["musetalk", "none"])
+    parser.add_argument("--avatar", default="none", choices=["musetalk", "echomimic", "none"])
     parser.add_argument("--avatar_image", default="data/avatars/avator_1", help="头像图片/目录")
     parser.add_argument("--output", default="examples/record_tech_video/output.mp4")
     parser.add_argument("--subtitle", default=True, type=lambda x: x.lower() != "false")
