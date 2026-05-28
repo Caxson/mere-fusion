@@ -279,3 +279,72 @@ class XTTS(BaseTTS):
                     self.parent.put_audio_frame(stream[idx:idx+self.chunk])
                     streamlen -= self.chunk
                     idx += self.chunk 
+###########################################################################################
+class CosyVoice2TTS(BaseTTS):
+    """CosyVoice 2 / 3 进程内流式零样本克隆。
+
+    不走 HTTP server，直接在进程内加载模型并流式合成（stream=True），
+    每次 yield 一个 torch 音频块，重采样到 16kHz 后逐帧推给数字人。
+
+    依赖：clone FunAudioLLM/CosyVoice 并把仓库根目录 + third_party/Matcha-TTS
+    加入 PYTHONPATH。模型目录通过 opt.cosyvoice_model_dir 指定
+    （CosyVoice2-0.5B 或 CosyVoice3-* ）。
+    需要 opt.REF_FILE（参考音频）+ opt.REF_TEXT（参考音频对应文字）。
+    """
+
+    def __init__(self, opt, parent):
+        super().__init__(opt, parent)
+        self._model = None
+        self._model_sr = 24000  # CosyVoice2 默认 24k
+
+    def _ensure_model(self):
+        if self._model is not None:
+            return
+        model_dir = getattr(self.opt, "cosyvoice_model_dir", "pretrained_models/CosyVoice2-0.5B")
+        # CosyVoice3 目录含 cosyvoice3.yaml；否则用 CosyVoice2。
+        use_v3 = "cosyvoice3" in str(model_dir).lower()
+        if use_v3:
+            from cosyvoice.cli.cosyvoice import CosyVoice3 as _CV
+            self._model = _CV(model_dir, load_trt=False, load_vllm=False, fp16=False)
+        else:
+            from cosyvoice.cli.cosyvoice import CosyVoice2 as _CV
+            self._model = _CV(model_dir, load_jit=False, load_trt=False, load_vllm=False, fp16=False)
+        self._model_sr = getattr(self._model, "sample_rate", 24000)
+
+    def txt_to_audio(self, msg):
+        try:
+            self._ensure_model()
+        except Exception as e:
+            print(f"[CosyVoice2TTS] 模型加载失败 ({type(e).__name__}: {e})，跳过本句")
+            return
+        self.stream_tts(self.cosyvoice2(msg))
+
+    def cosyvoice2(self, text) -> Iterator[np.ndarray]:
+        start = time.perf_counter()
+        first = True
+        for out in self._model.inference_zero_shot(
+            text,
+            self.opt.REF_TEXT,
+            self.opt.REF_FILE,
+            stream=True,
+        ):
+            if first:
+                print(f"CosyVoice2 time to first chunk: {time.perf_counter()-start:.3f}s")
+                first = False
+            if self.state != State.RUNNING:
+                break
+            speech = out["tts_speech"]  # torch.Tensor [1, T]
+            yield speech.cpu().numpy().flatten().astype(np.float32)
+
+    def stream_tts(self, audio_stream):
+        for stream in audio_stream:
+            if stream is None or len(stream) == 0:
+                continue
+            if self._model_sr != self.sample_rate:
+                stream = resampy.resample(x=stream, sr_orig=self._model_sr, sr_new=self.sample_rate)
+            streamlen = stream.shape[0]
+            idx = 0
+            while streamlen >= self.chunk and self.state == State.RUNNING:
+                self.parent.put_audio_frame(stream[idx:idx + self.chunk])
+                streamlen -= self.chunk
+                idx += self.chunk
