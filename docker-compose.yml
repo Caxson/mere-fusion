@@ -1,0 +1,33 @@
+# mere-fusion: one-line SRS WebRTC relay
+# Usage:  docker-compose up -d
+# Stop:   docker-compose down
+#
+# Ports:
+#   1935  RTMP
+#   1985  HTTP API (streams / clients)
+#   8080  HTTP-FLV / console
+#   8000  WebRTC UDP
+#
+# SRS console:  http://localhost:8080/
+# Backend page: http://localhost:8010/webrtcapi.html (after `python app.py`)
+
+services:
+  srs:
+    image: registry.cn-hangzhou.aliyuncs.com/ossrs/srs:5
+    container_name: mere-fusion-srs
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      # 127.0.0.1 when browser + backend are on the same machine.
+      # Set to the host's public IP for cross-machine access.
+      CANDIDATE: ${SRS_CANDIDATE:-127.0.0.1}
+    command: objs/srs -c conf/rtc.conf
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1985/api/v1/streams/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+# The Python backend is not containerized here: it needs local CUDA + large
+# GPU model weights, which is simpler to run directly. See README "Quick Start".
