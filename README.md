@@ -151,6 +151,21 @@ Modes: offline / chunked / online (real-time), with optional VAD.
 YOLO object detection + DeepFace (age/gender/emotion) + EasyOCR text recognition
 on the incoming video frames.
 
+### Dialogue Quality (real-time, implemented)
+
+Production-grade conversation pipeline in `service/dialogue/` that turns the basic
+"wait until the user stops → reply" loop into an interruptible, noise-robust one.
+Adapted from a real production telephony stack; **17 unit tests passing**.
+
+| Mechanism | Module |
+|---|---|
+| Adaptive energy gate — dual-threshold hysteresis + HFER spectral confirmation + floor-freeze during playback | `energy_gate.py` |
+| Conditional 1.2s sentence merge window — avoids cutting in on VAD-fragmented speech | `merge_window.py` |
+| Three-layer barge-in guard — opening / sentence-head / LLM intent (+ edit-distance fallback) | `interrupt.py` |
+| Version guard — a barge-in retires stale LLM/TTS streams | `version_guard.py` |
+
+Wiring guide: [`docs/INTEGRATION.md`](docs/INTEGRATION.md).
+
 ---
 
 ## Project Structure
@@ -171,10 +186,14 @@ mere-fusion/
 ├── webrtc.py                 # WebRTC HumanPlayer track
 ├── yolo_opencv.py            # Vision processing
 │
-├── llm/                      # LLM adapters (ChatGPT/Qwen/Gemini)
+├── llm/                      # LLM adapters (ChatGPT/Qwen/Gemini/DeepSeek)
+├── service/dialogue/         # Noise gate, merge window, barge-in, version guard
+├── avatar/ vision/ doubao/   # 2026 engines (opt-in): SoulX/EchoMimicV3, Qwen-VL, Doubao
 ├── musetalk/ ernerf/ wav2lip/# Avatar model code + weights
+├── examples/record_tech_video/ # Markdown → mp4 pipeline
+├── tests/                    # Unit tests (dialogue 17, doubao protocol 8)
 ├── data/                     # Avatar assets, pretrained weights
-└── docs/                     # Architecture, roadmap, upgrade plan
+└── docs/                     # Architecture, roadmap, upgrade, integration
 ```
 
 ---
@@ -183,13 +202,16 @@ mere-fusion/
 
 The 2026 modernization plan (streaming avatars, faster ASR, lower end-to-end latency)
 is tracked in [`docs/UPGRADE_PLAN_2026.md`](docs/UPGRADE_PLAN_2026.md) and
-[`docs/ROADMAP.md`](docs/ROADMAP.md). Highlights under evaluation:
+[`docs/ROADMAP.md`](docs/ROADMAP.md). New engines under evaluation (opt-in, see
+[`docs/INTEGRATION.md`](docs/INTEGRATION.md)):
 
 - **Avatar**: SoulX-FlashHead (streaming, 96 fps) for real-time, EchoMimicV3 (half-body + gestures) for offline video
 - **ASR**: FunASR for low-latency Chinese
 - **LLM**: DeepSeek-V4 Flash for fast TTFT
 - **TTS**: CosyVoice 3 streaming + zero-shot clone
-- **Dialogue**: adaptive noise gate, sentence merge window, three-layer barge-in
+
+> The real-time dialogue quality pipeline (noise gate / merge window / barge-in /
+> version guard) is **already implemented** — see Modules above.
 
 ---
 
@@ -341,19 +363,35 @@ Vue.js 客户端: [Caxson/mere_web_client](https://github.com/Caxson/mere_web_cl
 
 对输入视频帧做 YOLO 物体检测 + DeepFace（年龄/性别/情绪）+ EasyOCR 文字识别。
 
+### 对话质量链路（实时，已实现）
+
+`service/dialogue/` 把「等用户说完 → 回复」的玩具式对话，升级成可打断、抗噪的
+生产级链路。移植自真实生产电话语音系统，**17 个单元测试全过**。
+
+| 机制 | 模块 |
+|---|---|
+| 自适应能量门 — 双门限滞回 + HFER 高频能量比二次确认 + 播放期冻结基线 | `energy_gate.py` |
+| 1.2s 条件合并窗 — 避免 VAD 切碎完整问题导致 AI 抢话 | `merge_window.py` |
+| 三层打断保护 — 开场白 / 句首 / LLM 意图判定（+ 编辑距离 fallback） | `interrupt.py` |
+| 版本号控制 — 打断后旧 LLM/TTS 流自动失效 | `version_guard.py` |
+
+接入方法见 [`docs/INTEGRATION.md`](docs/INTEGRATION.md)。
+
 ---
 
 ## 路线图
 
 2026 现代化计划（流式数字人、更快 ASR、更低端到端延迟）见
 [`docs/UPGRADE_PLAN_2026.md`](docs/UPGRADE_PLAN_2026.md) 和
-[`docs/ROADMAP.md`](docs/ROADMAP.md)。评估中的重点：
+[`docs/ROADMAP.md`](docs/ROADMAP.md)。评估中的新引擎（可选接入，见
+[`docs/INTEGRATION.md`](docs/INTEGRATION.md)）：
 
 - **数字人**：实时用 SoulX-FlashHead（流式 96fps），离线录视频用 EchoMimicV3（半身+手势）
 - **ASR**：FunASR 低延迟中文
 - **LLM**：DeepSeek-V4 Flash 快速首响
 - **TTS**：CosyVoice 3 流式 + 零样本克隆
-- **对话**：自适应降噪门、断句合并窗、三层打断
+
+> 实时对话质量链路（降噪门 / 合并窗 / 打断 / 版本号）**已实现** —— 见上方「模块」。
 
 ---
 
