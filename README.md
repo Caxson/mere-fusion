@@ -22,30 +22,9 @@
 
 ## Architecture
 
-```
-Browser (mic + camera)
-    │  WebRTC
-    ▼
-SRS WebRTC Relay  (docker, one container)
-    │
-    ▼
-┌─ mere-fusion backend (Python) ──────────────────────┐
-│                                                       │
-│  Audio in ──► ASR    (Whisper / FasterWhisper)        │
-│                 │                                     │
-│                 ▼                                     │
-│              LLM     (ChatGPT / Qwen / Gemini)        │
-│                 │                                     │
-│                 ▼                                     │
-│              TTS     (EdgeTTS / CosyVoice / XTTS)     │
-│                 │                                     │
-│                 ▼                                     │
-│            Avatar    (MuseTalk / ErNeRF / Wav2Lip)    │
-│                 │                                     │
-└─────────────────┼─────────────────────────────────────┘
-                  ▼
-            SRS ──► Browser (video + audio)
-```
+![mere-fusion architecture](docs/architecture.png)
+
+> Vector source: [`docs/architecture.svg`](docs/architecture.svg)
 
 The backend pulls the client's audio/video from SRS, runs the pipeline
 **Audio → Noise Gate → ASR → Merge Window → LLM → TTS → Avatar**, and pushes the
@@ -235,30 +214,9 @@ is tracked in [`docs/UPGRADE_PLAN_2026.md`](docs/UPGRADE_PLAN_2026.md) and
 
 ## 架构
 
-```
-浏览器 (麦克风 + 摄像头)
-    │  WebRTC
-    ▼
-SRS WebRTC 中转  (docker, 单容器)
-    │
-    ▼
-┌─ mere-fusion 后端 (Python) ─────────────────────────┐
-│                                                       │
-│  音频 ──► ASR    (Whisper / FasterWhisper)            │
-│             │                                         │
-│             ▼                                         │
-│          LLM     (ChatGPT / Qwen / Gemini)            │
-│             │                                         │
-│             ▼                                         │
-│          TTS     (EdgeTTS / CosyVoice / XTTS)         │
-│             │                                         │
-│             ▼                                         │
-│        数字人    (MuseTalk / ErNeRF / Wav2Lip)        │
-│             │                                         │
-└─────────────┼─────────────────────────────────────────┘
-              ▼
-        SRS ──► 浏览器 (视频 + 音频)
-```
+![mere-fusion 架构图](docs/architecture.png)
+
+> 矢量源文件：[`docs/architecture.svg`](docs/architecture.svg)
 
 后端从 SRS 拉取客户端音视频流，跑完
 **音频 → 降噪门 → ASR → 合并窗 → LLM → TTS → 数字人** 链路，

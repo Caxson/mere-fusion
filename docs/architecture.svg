@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 1015" width="1100" height="1015">
+<style>text{font-family:"Helvetica Neue",Helvetica,Arial,"PingFang SC","Microsoft YaHei","SimHei",sans-serif;}</style>
+<defs>
+<marker id="mab" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#2563eb"/></marker>
+<marker id="mag" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#16a34a"/></marker>
+<marker id="map" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#9333ea"/></marker>
+</defs>
+<rect width="1100" height="1015" fill="#ffffff"/>
+<text x="550.0" y="40" text-anchor="middle" font-size="20" font-weight="600" fill="#111827">mere-fusion · 实时数字人架构 Real-time Avatar Architecture</text>
+<rect x="400" y="236" width="300" height="510" rx="10" fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="6,4"/>
+<text x="415" y="260" font-size="13" font-weight="600" fill="#374151">mere-fusion 后端 Backend (Python)</text>
+<rect x="720" y="512" width="360" height="238" rx="10" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1.5" stroke-dasharray="6,4"/>
+<text x="735" y="536" font-size="13" font-weight="600" fill="#0f766e">service/dialogue · 对话控制 (已实现 · 17 tests)</text>
+<rect x="410" y="64" width="280" height="50" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="550.0" y="87.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">浏览器 Browser</text>
+<text x="550.0" y="104.0" text-anchor="middle" font-size="11.5" fill="#6b7280">麦克风 + 摄像头 mic + camera</text>
+<rect x="410" y="150" width="280" height="50" rx="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+<text x="550.0" y="173.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">SRS WebRTC 中转 Relay</text>
+<text x="550.0" y="190.0" text-anchor="middle" font-size="11.5" fill="#6b7280">docker · 单容器</text>
+<rect x="430" y="282" width="240" height="44" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="550.0" y="309.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">音频输入 Audio in</text>
+<rect x="430" y="346" width="240" height="44" rx="8" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1.5"/>
+<text x="550.0" y="366.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">降噪门 Noise Gate</text>
+<text x="550.0" y="383.0" text-anchor="middle" font-size="11.5" fill="#6b7280">energy + HFER</text>
+<rect x="430" y="410" width="240" height="44" rx="8" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+<text x="550.0" y="430.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">ASR</text>
+<text x="550.0" y="447.0" text-anchor="middle" font-size="11.5" fill="#6b7280">Whisper / FunASR</text>
+<rect x="430" y="474" width="240" height="44" rx="8" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1.5"/>
+<text x="550.0" y="494.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">合并窗 Merge Window</text>
+<text x="550.0" y="511.0" text-anchor="middle" font-size="11.5" fill="#6b7280">1.2s</text>
+<rect x="430" y="538" width="240" height="44" rx="8" fill="#faf5ff" stroke="#ddd6fe" stroke-width="1.5"/>
+<text x="550.0" y="558.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">LLM</text>
+<text x="550.0" y="575.0" text-anchor="middle" font-size="11.5" fill="#6b7280">DeepSeek / ChatGPT / Qwen</text>
+<rect x="430" y="602" width="240" height="44" rx="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+<text x="550.0" y="622.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">TTS</text>
+<text x="550.0" y="639.0" text-anchor="middle" font-size="11.5" fill="#6b7280">CosyVoice / EdgeTTS</text>
+<rect x="430" y="666" width="240" height="44" rx="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+<text x="550.0" y="686.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">数字人 Avatar</text>
+<text x="550.0" y="703.0" text-anchor="middle" font-size="11.5" fill="#6b7280">MuseTalk / SoulX-FlashHead</text>
+<rect x="410" y="800" width="280" height="50" rx="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+<text x="550.0" y="830.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">SRS WebRTC 中转 Relay</text>
+<rect x="410" y="886" width="280" height="50" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="550.0" y="909.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">浏览器 Browser</text>
+<text x="550.0" y="926.0" text-anchor="middle" font-size="11.5" fill="#6b7280">视频 + 音频 video + audio</text>
+<rect x="740" y="552" width="320" height="80" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="900.0" y="590.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">打断保护 Barge-in guard</text>
+<text x="900.0" y="607.0" text-anchor="middle" font-size="11.5" fill="#6b7280">开场白 / 句首 / LLM 意图 + fallback</text>
+<rect x="740" y="648" width="320" height="80" rx="8" fill="#ffffff" stroke="#d1d5db" stroke-width="1.5"/>
+<text x="900.0" y="686.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">版本号 Version guard</text>
+<text x="900.0" y="703.0" text-anchor="middle" font-size="11.5" fill="#6b7280">打断后旧 LLM / TTS 流自动失效</text>
+<rect x="40" y="516" width="250" height="68" rx="8" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+<text x="165.0" y="548.0" text-anchor="middle" font-size="14" font-weight="600" fill="#111827">视觉理解 Qwen-VL</text>
+<text x="165.0" y="565.0" text-anchor="middle" font-size="11.5" fill="#6b7280">1Hz 截帧 · 图文一起发</text>
+<line x1="550" y1="114" x2="550" y2="150" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<rect x="559" y="123.0" width="58" height="18" fill="#ffffff" opacity="0.95"/>
+<text x="563" y="136.0" font-size="11.5" fill="#6b7280">WebRTC</text>
+<line x1="550" y1="200" x2="550" y2="282" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<line x1="550" y1="326" x2="550" y2="346" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<line x1="550" y1="390" x2="550" y2="410" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<line x1="550" y1="454" x2="550" y2="474" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<line x1="550" y1="518" x2="550" y2="538" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<line x1="550" y1="582" x2="550" y2="602" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<line x1="550" y1="646" x2="550" y2="666" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<line x1="550" y1="710" x2="550" y2="800" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<line x1="550" y1="850" x2="550" y2="886" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<rect x="559" y="859.0" width="58" height="18" fill="#ffffff" opacity="0.95"/>
+<text x="563" y="872.0" font-size="11.5" fill="#6b7280">WebRTC</text>
+<line x1="290" y1="552" x2="430" y2="556" stroke="#16a34a" stroke-width="1.6" marker-end="url(#mag)"/>
+<rect x="312" y="540" width="56" height="17" fill="#ffffff" opacity="0.95"/>
+<text x="316" y="553" font-size="11.5" fill="#6b7280">图文</text>
+<line x1="720" y1="600" x2="672" y2="560" stroke="#9333ea" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#map)"/>
+<line x1="720" y1="640" x2="672" y2="624" stroke="#9333ea" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#map)"/>
+<line x1="720" y1="680" x2="672" y2="688" stroke="#9333ea" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#map)"/>
+<rect x="28" y="620" width="250" height="86" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+<line x1="40" y1="640" x2="70" y2="640" stroke="#2563eb" stroke-width="1.8" marker-end="url(#mab)"/>
+<text x="78" y="644" font-size="12" fill="#6b7280">主数据流 Main flow</text>
+<line x1="40" y1="664" x2="70" y2="664" stroke="#16a34a" stroke-width="1.6" marker-end="url(#mag)"/>
+<text x="78" y="668" font-size="12" fill="#6b7280">视觉理解 Vision</text>
+<line x1="40" y1="688" x2="70" y2="688" stroke="#9333ea" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#map)"/>
+<text x="78" y="692" font-size="12" fill="#6b7280">对话控制 Dialogue control</text>
+</svg>
