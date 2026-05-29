@@ -47,8 +47,24 @@ SRS WebRTC Relay  (docker, one container)
             SRS ──► Browser (video + audio)
 ```
 
-The backend pulls the client's audio/video from SRS, runs the ASR → LLM → TTS → avatar
-pipeline, and pushes the generated talking-head stream back to SRS for the browser to play.
+The backend pulls the client's audio/video from SRS, runs the pipeline
+**Audio → Noise Gate → ASR → Merge Window → LLM → TTS → Avatar**, and pushes the
+generated talking-head stream back to SRS for the browser to play.
+
+### Real-time dialogue control
+
+A production-grade control layer (`service/dialogue/`, **implemented, 17 unit tests**)
+makes the conversation interruptible and noise-robust. It lives inside the data flow
+above — a noise gate before ASR, a merge window after ASR — plus two cross-cutting guards:
+
+| Mechanism | Role | Module |
+|---|---|---|
+| Noise gate | Dual-threshold hysteresis + HFER spectral check; freezes the noise floor while the avatar talks so TTS echo can't poison it | `energy_gate.py` |
+| Merge window | Holds a finished ASR sentence ~1.2s so VAD-fragmented speech isn't answered mid-thought | `merge_window.py` |
+| Barge-in guard | When the user speaks during playback, decides interrupt vs ignore — opening guard / sentence-head guard / LLM intent (+ edit-distance fallback) | `interrupt.py` |
+| Version guard | A barge-in bumps the session version, retiring stale LLM/TTS output | `version_guard.py` |
+
+See [`docs/INTEGRATION.md`](docs/INTEGRATION.md) for wiring.
 
 ---
 
@@ -171,10 +187,15 @@ mere-fusion/
 ├── webrtc.py                 # WebRTC HumanPlayer track
 ├── yolo_opencv.py            # Vision processing
 │
-├── llm/                      # LLM adapters (ChatGPT/Qwen/Gemini)
+├── llm/                      # LLM adapters (ChatGPT/Qwen/Gemini/DeepSeek)
+├── service/dialogue/         # Real-time dialogue control (noise gate / merge
+│                             #   window / barge-in / version guard) + tests
+├── avatar/ vision/ doubao/   # 2026 engines (opt-in): SoulX/EchoMimicV3, Qwen-VL, Doubao
 ├── musetalk/ ernerf/ wav2lip/# Avatar model code + weights
+├── examples/record_tech_video/ # Markdown → mp4 pipeline
+├── tests/                    # Unit tests (dialogue 17, doubao protocol 8)
 ├── data/                     # Avatar assets, pretrained weights
-└── docs/                     # Architecture, roadmap, upgrade plan
+└── docs/                     # Architecture, roadmap, upgrade, integration
 ```
 
 ---
@@ -189,7 +210,8 @@ is tracked in [`docs/UPGRADE_PLAN_2026.md`](docs/UPGRADE_PLAN_2026.md) and
 - **ASR**: FunASR for low-latency Chinese
 - **LLM**: DeepSeek-V4 Flash for fast TTFT
 - **TTS**: CosyVoice 3 streaming + zero-shot clone
-- **Dialogue**: adaptive noise gate, sentence merge window, three-layer barge-in
+
+> The real-time dialogue control layer is **already implemented** — see Architecture above.
 
 ---
 
@@ -238,8 +260,23 @@ SRS WebRTC 中转  (docker, 单容器)
         SRS ──► 浏览器 (视频 + 音频)
 ```
 
-后端从 SRS 拉取客户端音视频流，跑完 ASR → LLM → TTS → 数字人 链路，
+后端从 SRS 拉取客户端音视频流，跑完
+**音频 → 降噪门 → ASR → 合并窗 → LLM → TTS → 数字人** 链路，
 再把生成的数字人画面推回 SRS，由浏览器播放。
+
+### 实时对话控制层
+
+一个生产级控制层（`service/dialogue/`，**已实现，17 个单元测试**）让对话可打断、抗噪。
+它嵌在上面的数据流里 —— ASR 前一道降噪门、ASR 后一个合并窗 —— 外加两个横切保护：
+
+| 机制 | 作用 | 模块 |
+|---|---|---|
+| 降噪门 | 双门限滞回 + HFER 高频能量比二次确认；数字人播放时冻结噪声基线，防止 TTS 回声污染 | `energy_gate.py` |
+| 合并窗 | ASR 出句后保留约 1.2s，避免 VAD 切碎的半句被提前回应 | `merge_window.py` |
+| 打断保护 | 用户在播放期说话时判断「打断还是忽略」—— 开场白 / 句首 / LLM 意图（+ 编辑距离 fallback） | `interrupt.py` |
+| 版本号 | 打断后递增会话版本号，让旧 LLM/TTS 输出自动失效 | `version_guard.py` |
+
+接入方法见 [`docs/INTEGRATION.md`](docs/INTEGRATION.md)。
 
 ---
 
@@ -353,7 +390,8 @@ Vue.js 客户端: [Caxson/mere_web_client](https://github.com/Caxson/mere_web_cl
 - **ASR**：FunASR 低延迟中文
 - **LLM**：DeepSeek-V4 Flash 快速首响
 - **TTS**：CosyVoice 3 流式 + 零样本克隆
-- **对话**：自适应降噪门、断句合并窗、三层打断
+
+> 实时对话控制层**已实现** —— 见上方「架构」。
 
 ---
 
