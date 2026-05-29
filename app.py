@@ -3,6 +3,7 @@ import asyncio
 import io
 import json
 import logging
+import os
 import subprocess
 import uuid
 
@@ -17,7 +18,8 @@ from ernerf.nerf_triplane.utils import *
 from ernerf.nerf_triplane.network import NeRFNetwork
 from nerfreal import NeRFReal
 from whisper_online_server import WhisperRTCServerProcessor
-from yolo_opencv import yolo_opencv_main, YoloOpencvProcessor
+from yolo_opencv import YoloOpencvProcessor
+from stream_openai_video import active_sessions, session_lock
 from aiohttp import web
 import aiohttp
 import aiohttp_cors
@@ -40,10 +42,6 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 # 定义最大会话数
 MAX_SESSIONS = 5
-
-# 存储当前活跃的会话
-active_sessions = {}
-session_lock = asyncio.Lock()
 
 # 当前会话计数
 current_sessions = 0
@@ -73,6 +71,8 @@ async def start_session(request):
     # 自动分配一个 session_id
     session_id = str(uuid.uuid4())
 
+    logger.info(f'准备新启动一个会话，session_id: {session_id}')
+
     async with session_lock:
         global current_sessions
         # 检查是否达到最大会话数
@@ -80,8 +80,10 @@ async def start_session(request):
             return web.json_response({'code': 1, 'message': 'Maximum number of sessions reached'}, status=429)
 
         # 定义拉流和推流的流 URL，包含 session_id
-        consume_stream_url = f'webrtc://<server_ip>/live/stream_{session_id}'
-        produce_stream_url = f'webrtc://<server_ip>/live/processed_stream_{session_id}'
+        # SRS_HOST 从环境变量读，默认本地 docker-compose
+        srs_host = os.environ.get('SRS_HOST', 'localhost')
+        consume_stream_url = f'webrtc://{srs_host}/live/stream_{session_id}'
+        produce_stream_url = f'webrtc://{srs_host}/live/processed_stream_{session_id}'
 
         # 创建会话实例
         session_obj = ConnectSession(session_id, consume_stream_url, produce_stream_url)
@@ -107,6 +109,8 @@ async def stop_session(request):
     """
     data = await request.json()
     session_id = data.get('session_id')
+    logger.info(f'准备关闭一个会话，session_id: {session_id}')
+
     if not session_id:
         return web.json_response({'code': 1, 'message': 'session_id is required'}, status=400)
 
@@ -200,36 +204,6 @@ async def record(request):
         ),
     )
 
-
-class UserSession:
-    """每个用户会话的封装类"""
-
-    def __init__(self, session_id, pc):
-        self.session_id = session_id
-        self.pc = pc
-        self.video_buffer = None
-        self.audio_buffer = None
-
-    def add_track(self, track):
-        """根据轨道类型添加处理逻辑"""
-        if track.kind == "audio":
-            logger.info(f"会话 {self.session_id}: 接收到音频轨道")
-            self.audio_buffer = AudioStreamTrack(track, self.session_id)
-            # TODO DEL
-            self.pc.addTrack(self.audio_buffer)
-        elif track.kind == "video":
-            logger.info(f"会话 {self.session_id}: 接收到视频轨道")
-            self.video_buffer = VideoStreamTrack(track, self.session_id)
-            # TODO DEL
-            self.pc.addTrack(self.video_buffer)
-
-    async def close(self):
-        if self.video_buffer:
-            await self.video_buffer.close()
-        if self.audio_buffer:
-            await self.audio_buffer.close()
-
-
 class AudioStreamTrack(MediaStreamTrack):
     """处理音频流数据"""
 
@@ -243,10 +217,14 @@ class AudioStreamTrack(MediaStreamTrack):
         self.processor = WhisperRTCServerProcessor(session_id, min_chunk_r=1)
 
     async def recv(self):
-        frame = await self.track.recv()
-        raw_bytes = frame.to_bytes()
-        self.processor.process(raw_bytes)
-        return frame
+        try:
+            frame = await self.track.recv()
+            raw_bytes = frame.to_bytes()
+            self.processor.process(raw_bytes)
+            return frame
+        except Exception as e:
+            logger.exception(f"处理音频报错，EXCEPTION:{e}")
+            return None
 
     async def close(self):
         await self.processor.close()
@@ -271,7 +249,6 @@ class VideoStreamTrack(MediaStreamTrack):
 
     async def close(self):
         await self.processor.close()
-
 
 async def on_shutdown(app):
     coros = [pc.close() for pc in pcs]
@@ -311,6 +288,7 @@ async def post_json(url, json):
 
 class ConnectSession:
     def __init__(self, session_id, consume_stream_url, produce_stream_url):
+        self.processing_tasks = []
         self.session_id = session_id
         self.opt = opt
         self.model = None
@@ -324,8 +302,22 @@ class ConnectSession:
         self.active = True  # 会话状态
         # self.processor = stream_out_video_main(opt)
         self.consume_connected = asyncio.Event()  # 拉流连接建立事件
-        self.use_session = None
+        # self.use_session = None
 
+        # 重试相关
+        self.consume_retry_attempts = 0
+        self.consume_max_retries = 5
+        self.consume_delays = [1, 2, 4, 8, 16]  # 秒
+
+        self.produce_retry_attempts = 0
+        self.produce_max_retries = 3
+        self.produce_delays = [1, 2, 4]  # 秒
+
+        self.close_lock = asyncio.Lock()
+        self.is_closing = False  # 标志位，防止重复关闭
+
+        self.video_processor = YoloOpencvProcessor(session_id)
+        self.audio_processor = WhisperRTCServerProcessor(session_id, min_chunk_r=1)
 
     async def initialize_model(self):
         """根据配置初始化模型实例"""
@@ -392,6 +384,44 @@ class ConnectSession:
             nerfreal = NeRFReal(opt, trainer, test_loader)
             return nerfreal
 
+    async def post_with_retries(self, session, api, json_data, max_retries, delays):
+        """
+        通用的 POST 请求重试方法
+
+        :param session: aiohttp ClientSession 实例
+        :param api: 请求的 API URL
+        :param json_data: 发送的 JSON 数据
+        :param max_retries: 最大重试次数
+        :param delays: 每次重试的延迟时间列表（秒）
+        :return: 成功时返回响应 JSON，失败时返回 None
+        """
+        for attempt in range(max_retries):
+            if not self.active:
+                logger.warning(f"Session {self.session_id} is no longer active. Aborting POST to {api}.")
+                return None
+            try:
+                async with session.post(api, json=json_data) as resp:
+                    if resp.status == 200:
+                        res = await resp.json()
+                        if res.get('code') == 0:
+                            logger.debug(f"Successful response from {api}: {res}")
+                            return res
+                        else:
+                            logger.error(f"Error response from {api}: {res}")
+                    else:
+                        text = await resp.text()
+                        logger.error(f"HTTP error from {api}: status {resp.status}, message {text}")
+            except Exception as e:
+                logger.error(f"Exception during POST request to {api}: {e}")
+
+            if attempt < max_retries - 1:
+                delay = delays[attempt]
+                logger.info(f"Retrying in {delay} seconds... (Attempt {attempt + 2}/{max_retries})")
+                await asyncio.sleep(delay)
+            else:
+                logger.error(f"All {max_retries} attempts to {api} failed.")
+        return None
+
     async def start(self):
         logger.info(f"Starting session {self.session_id}")
         # 添加接收器，表示我们希望接收音视频流
@@ -399,6 +429,86 @@ class ConnectSession:
         self.consume_pc.addTransceiver('audio', direction='recvonly')
         self.consume_pc.addTransceiver('video', direction='recvonly')
         self.task = asyncio.create_task(self.run())
+
+    async def reconnect_consume(self):
+        """尝试重新建立拉流连接的重试逻辑"""
+        while self.consume_retry_attempts < self.consume_max_retries and self.active:
+            delay = self.consume_delays[self.consume_retry_attempts]
+            logger.info(
+                f"Attempting to reconnect consume_pc in {delay} seconds... (Attempt {self.consume_retry_attempts + 1}/{self.consume_max_retries})")
+            await asyncio.sleep(delay)
+            if not self.active:
+                logger.warning(f"Session {self.session_id} is no longer active. Aborting consume reconnect.")
+                return
+            try:
+                # 重新创建并设置本地描述
+                consume_offer = await self.consume_pc.createOffer()
+                await self.consume_pc.setLocalDescription(consume_offer)
+                logger.info(f"Consume Offer SDP for session {self.session_id}: {consume_offer.sdp}")
+                play_params = {
+                    'api': self.pull_url,
+                    'streamurl': self.consume_stream_url,
+                    'clientip': None,
+                    'sdp': self.consume_pc.localDescription.sdp,
+                    'tid': str(random.randint(10000, 99999)),
+                    'action': 'play'
+                }
+                # 发送拉流请求到 SRS
+                res = await self.post_with_retries(play_params['api'], play_params, 1, [0])  # 单次尝试
+                if res and res.get('code') == 0:
+                    answer = RTCSessionDescription(sdp=res['sdp'], type='answer')
+                    await self.consume_pc.setRemoteDescription(answer)
+                    logger.info(f"Reconnected consume_pc for session {self.session_id}")
+                    self.consume_retry_attempts = 0
+                    return
+                else:
+                    logger.error(f"Failed to reconnect consume_pc on attempt {self.consume_retry_attempts + 1}")
+            except Exception as e:
+                logger.error(f"Error during reconnecting consume_pc on attempt {self.consume_retry_attempts + 1}: {e}")
+            self.consume_retry_attempts += 1
+
+        logger.error(f"Exceeded maximum retries for reconnecting consume_pc in session {self.session_id}")
+        await self.close()
+
+    async def reconnect_produce(self):
+        """尝试重新建立推流连接的重试逻辑"""
+        while self.produce_retry_attempts < self.produce_max_retries and self.active:
+            delay = self.produce_delays[self.produce_retry_attempts]
+            logger.info(
+                f"Attempting to reconnect produce_pc in {delay} seconds... (Attempt {self.produce_retry_attempts + 1}/{self.produce_max_retries})")
+            await asyncio.sleep(delay)
+            if not self.active:
+                logger.warning(f"Session {self.session_id} is no longer active. Aborting produce reconnect.")
+                return
+            try:
+                # 重新创建并设置本地描述
+                produce_offer = await self.produce_pc.createOffer()
+                await self.produce_pc.setLocalDescription(produce_offer)
+                logger.info(f"Produce Offer SDP for session {self.session_id}: {produce_offer.sdp}")
+                publish_params = {
+                    'api': self.push_url,
+                    'streamurl': self.produce_stream_url,
+                    'clientip': None,
+                    'sdp': self.produce_pc.localDescription.sdp,
+                    'tid': str(random.randint(10000, 99999)),
+                    'action': 'publish'
+                }
+                # 发送推流请求到 SRS
+                res_publish = await self.post_with_retries(publish_params['api'], publish_params, 1, [0])  # 单次尝试
+                if res_publish and res_publish.get('code') == 0:
+                    answer_publish = RTCSessionDescription(sdp=res_publish['sdp'], type='answer')
+                    await self.produce_pc.setRemoteDescription(answer_publish)
+                    logger.info(f"Reconnected produce_pc for session {self.session_id}")
+                    self.produce_retry_attempts = 0
+                    return
+                else:
+                    logger.error(f"Failed to reconnect produce_pc on attempt {self.produce_retry_attempts + 1}")
+            except Exception as e:
+                logger.error(f"Error during reconnecting produce_pc on attempt {self.produce_retry_attempts + 1}: {e}")
+            self.produce_retry_attempts += 1
+
+        logger.error(f"Exceeded maximum retries for reconnecting produce_pc in session {self.session_id}")
+        await self.close()
 
     async def run(self):
         async with ClientSession() as session:
@@ -410,8 +520,11 @@ class ConnectSession:
                 if self.consume_pc.connectionState == 'connected':
                     self.consume_connected.set()
                 elif self.consume_pc.connectionState in ('failed', 'closed', 'disconnected'):
-                    # TODO 重试机制
-                    await self.close()
+                    # 启动拉流重试机制
+                    if self.consume_retry_attempts < self.consume_max_retries:
+                        await asyncio.create_task(self.reconnect_consume())
+                    else:
+                        await self.close()
 
             # 设置推流连接状态变化事件处理器
             @self.produce_pc.on('connectionstatechange')
@@ -419,15 +532,23 @@ class ConnectSession:
                 logger.info(
                     f'Produce PC connection state for session {self.session_id}: {self.produce_pc.connectionState}')
                 if self.produce_pc.connectionState in ('failed', 'closed', 'disconnected'):
-                    # TODO 重试机制
-                    await self.close()
+                    # 启动推流重试机制
+                    if self.produce_retry_attempts < self.produce_max_retries:
+                        await asyncio.create_task(self.reconnect_produce())
+                    else:
+                        await self.close()
 
-            self.use_session = UserSession(self.session_id, self.consume_pc)
+            # self.use_session = UserSession(self.session_id, self.consume_pc)
 
             @self.consume_pc.on('track')
             def on_track(track):
-                logger.info(f'Track {track.kind} received, id: {track.id} for session {self.session_id}')
-                self.use_session.add_track(track)
+                logger.info(f'接收-Track {track.kind} received, id: {track.id} for session {self.session_id}')
+                if track.kind == 'video':
+                    task = asyncio.create_task(self.process_video(track))
+                    self.processing_tasks.append(task)
+                elif track.kind == 'audio':
+                    task = asyncio.create_task(self.process_audio(track))
+                    self.processing_tasks.append(task)
 
             # 创建并设置拉流的本地描述
             try:
@@ -463,10 +584,15 @@ class ConnectSession:
                 await self.close()
                 return
 
-            # 数字人启动
-            player = HumanPlayer(self.model)
-            self.produce_pc.addTrack(player.audio)
-            self.produce_pc.addTrack(player.video)
+            # 数字人启动（假设存在的类 HumanPlayer）
+            try:
+                player = HumanPlayer(self.model)
+                self.produce_pc.addTrack(player.audio)
+                self.produce_pc.addTrack(player.video)
+            except Exception as e:
+                logger.error(f"Error adding tracks to produce_pc in session {self.session_id}: {e}")
+                await self.close()
+                return
 
             # 等待拉流连接完全建立
             try:
@@ -521,14 +647,66 @@ class ConnectSession:
             finally:
                 await self.close()
 
+    async def process_audio(self, relay_audio):
+        logger.info(f"Started processing audio for session {self.session_id}")
+        try:
+            while self.active:
+                frame = await relay_audio.recv()
+                if frame is None:
+                    logger.warning(f"Audio frame is None for session {self.session_id}")
+                    break
+                try:
+                    raw_bytes = frame.to_bytes
+                    self.audio_processor.process(raw_bytes)
+                except Exception as e:
+                    logger.warning(f"Error=1 during audio processing for session {self.session_id}: {e}")
+                    # raw_bytes = frame.to_bytes
+                    # self.audio_processor.process(raw_bytes)
+        except Exception as e:
+            logger.error(f"Error processing audio for session {self.session_id}: {e}")
+        finally:
+            logger.info(f"Stopped processing audio for session {self.session_id}")
+
+    async def process_video(self, relay_video):
+        logger.info(f"Started processing video for session {self.session_id}")
+        try:
+            while self.active:
+                frame = await relay_video.recv()
+                if frame is None:
+                    logger.warning(f"Video frame is None for session {self.session_id}")
+                    break
+                # 处理视频帧，例如目标检测
+                self.video_processor.process_frame(frame)
+        except Exception as e:
+            logger.error(f"Error processing video for session {self.session_id}: {e}")
+        finally:
+            logger.info(f"Stopped processing video for session {self.session_id}")
+
     async def close(self):
-        if not self.active:
-            return
-        self.active = False
-        await self.consume_pc.close()
-        await self.produce_pc.close()
-        await self.use_session.close()
-        logger.info(f"Stream relaying for session {self.session_id} closed.")
+        async with self.close_lock:
+            if not self.active:
+                return
+            self.active = False
+            self.is_closing = True
+            try:
+                await self.consume_pc.close()
+                await self.produce_pc.close()
+                if self.video_processor:
+                    await self.video_processor.close()
+                if self.audio_processor:
+                    await self.audio_processor.close()
+                # if self.use_session:
+                #     await self.use_session.close()
+                # if self.session:
+                #     await self.session.close()
+                # 取消并等待后台任务完成
+                for task in self.processing_tasks:
+                    task.cancel()
+                await asyncio.gather(*self.processing_tasks, return_exceptions=True)
+                self.processing_tasks.clear()
+            except Exception as e:
+                logger.error(f"Error during closing connections for session {self.session_id}: {e}")
+            logger.info(f"Stream relaying for session {self.session_id} closed.")
 
 
 def run_server(runner):
@@ -697,10 +875,11 @@ if __name__ == "__main__":
     parser.add_argument('--model', type=str, default='ernerf')  # ernerf musetalk wav2lip
 
     parser.add_argument('--transport', type=str, default='rtc')  # rtmp webrtc rtc
+    _srs_base = f"http://{os.environ.get('SRS_HOST', 'localhost')}:{os.environ.get('SRS_HTTP_PORT', '1985')}"
     parser.add_argument('--push_url', type=str,
-                        default='http://<server_ip>:1985/rtc/v1/publish/')  # rtmp://localhost/live/livestream    http://localhost:1985/rtc/v1/whip/?app=live&stream=livestream
+                        default=f'{_srs_base}/rtc/v1/publish/')
     parser.add_argument('--pull_url', type=str,
-                        default='http://<server_ip>:1985/rtc/v1/play/')
+                        default=f'{_srs_base}/rtc/v1/play/')
 
     parser.add_argument('--max_session', type=int, default=10)  # multi session count
     parser.add_argument('--listen_port', type=int, default=8010)
@@ -722,13 +901,12 @@ if __name__ == "__main__":
     #############################################################################
     appasync = web.Application()
     appasync.on_shutdown.append(on_shutdown)
-    appasync.router.add_post('/start_session', start_session)
-    appasync.router.add_post('/stop_session', stop_session)
-    appasync.router.add_post("/interrupt", interrupt)
-    appasync.router.add_post("/talk", talk)
-    appasync.router.add_post("/set_audio_type", set_audio_type)
-    appasync.router.add_post("/record", record)
-    appasync.router.add_static('/', path='web')
+    appasync.router.add_post('/api/start_session', start_session)
+    appasync.router.add_post('/api/stop_session', stop_session)
+    appasync.router.add_post("/api/interrupt", interrupt)
+    appasync.router.add_post("/api/talk", talk)
+    appasync.router.add_post("/api/set_audio_type", set_audio_type)
+    appasync.router.add_post("/api/record", record)
 
     # Configure default CORS settings.
     cors = aiohttp_cors.setup(appasync, defaults={
@@ -747,6 +925,6 @@ if __name__ == "__main__":
         pagename = 'echoapi.html'
     elif opt.transport == 'rtcpush':
         pagename = 'rtcpushapi.html'
-    print('start http server; http://<serverip>:' + str(opt.listenport) + '/' + pagename)
+    print('start http server; http://<serverip>:' + str(opt.listen_port) + '/' + pagename)
 
     run_server(web.AppRunner(appasync))

@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import json
 import multiprocessing
 import queue
@@ -14,7 +15,9 @@ from dotenv import load_dotenv
 from flask import Flask
 from flask_sockets import Sockets
 
-from app import active_sessions
+# 存储当前活跃的会话
+active_sessions = {}
+session_lock = asyncio.Lock()
 
 # ernerf
 from ernerf.nerf_triplane.utils import *

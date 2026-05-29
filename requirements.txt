@@ -23,7 +23,8 @@ tensorflow
 tensorboard
 gdown
 requests
-imageio[ffmpeg]
+imageio
+imageio-ffmpeg
 omegaconf
 gradio
 spaces

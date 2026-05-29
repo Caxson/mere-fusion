@@ -1,11 +1,16 @@
 import asyncio
 import json
+import os
 import random
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 from aiohttp import ClientSession
 import av
 import cv2
+
+# SRS 地址从环境变量读，默认本地
+SRS_HOST = os.environ.get('SRS_HOST', 'localhost')
+SRS_HTTP = f"http://{SRS_HOST}:{os.environ.get('SRS_HTTP_PORT', '1985')}"
 
 
 class RelayVideoStreamTrack(MediaStreamTrack):
@@ -65,10 +70,10 @@ async def consume_and_produce_stream():
 
     async with ClientSession() as session:
         # 拉流部分
-        play_url = 'http://<server_ip>:1985/rtc/v1/play/'
+        play_url = f'{SRS_HTTP}/rtc/v1/play/'
         play_params = {
             'api': play_url,
-            'streamurl': 'webrtc://<server_ip>/live/stream',
+            'streamurl': f'webrtc://{SRS_HOST}/live/stream',
             'clientip': None,
             'sdp': '',
             'tid': str(random.randint(10000, 99999)),
@@ -78,7 +83,7 @@ async def consume_and_produce_stream():
         # 当接收到媒体流时，保存轨道并准备处理
         @consume_pc.on('track')
         def on_track(track):
-            print(f'Track {track.kind} received, id: {track.id}')
+            print(f'接收-Track {track.kind} received, id: {track.id}')
             if track.kind == 'video':
                 relay_video = RelayVideoStreamTrack(track)
                 produce_pc.addTrack(relay_video)
@@ -122,10 +127,10 @@ async def consume_and_produce_stream():
         # await asyncio.sleep(1)
 
         # 推流部分
-        publish_url = 'http://<server_ip>:1985/rtc/v1/publish/'
+        publish_url = f'{SRS_HTTP}/rtc/v1/publish/'
         publish_params = {
             'api': publish_url,
-            'streamurl': 'webrtc://<server_ip>/live/processed_stream',
+            'streamurl': f'webrtc://{SRS_HOST}/live/processed_stream',
             'clientip': None,
             'sdp': '',
             'tid': str(random.randint(10000, 99999)),

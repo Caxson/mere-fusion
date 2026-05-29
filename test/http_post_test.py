@@ -11,7 +11,7 @@ async def start_session(request):
     {}
     """
     # 自动分配一个 session_id
-    session_id = str(uuid.uuid4())
+    session_id = 'test123'
 
     return web.json_response({'code': 0, 'message': 'Session started', 'session_id': session_id})
 
@@ -31,7 +31,8 @@ async def stop_session(request):
 
     return web.json_response({'code': 0, 'message': 'Session stopped'})
 
-async def main():
+
+async def http_main():
     appasync = web.Application()
     appasync.router.add_post('/api/start_session', start_session)
     appasync.router.add_post('/api/stop_session', stop_session)
@@ -48,4 +49,4 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    asyncio.run(http_main())

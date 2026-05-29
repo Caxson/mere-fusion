@@ -10,6 +10,7 @@ import argparse
 
 import easyocr
 import numpy as np
+import torch
 # import imageio_ffmpeg as imageio
 from ultralytics import YOLO
 import subprocess
@@ -39,7 +40,7 @@ ap.add_argument('-fpt', '--fpsthrottle', required=False,
 args = ap.parse_args()
 
 # Load a pre-trained YOLOv10n model (this should be done once, not inside the detect function if called frequently)
-model = YOLO("yolo/config/yolov10x.pt")
+# model = YOLO("yolo/config/yolov10x.pt")
 input_stream_config = "yolo/config/stream.sdp"
 
 command = [
@@ -132,9 +133,22 @@ class YoloOpencvProcessor:
         self.session_id = session_id
         self.image = None
         self.session_manger = OpenAISessionManager(session_id)
+        self.initialized = False
+        self.model = YOLO("yolo/config/yolov10x.pt")
 
     def process_frame(self, frame):
         if frame is not None:
+            if not self.initialized:
+                # 初始化模型
+                input_tensor = torch.randn(1, 3, frame.height, frame.width)
+                try:
+                    self.model(input_tensor)
+                    self.initialized = True
+                    logging.info(f"Model initialized for session {self.session_id}")
+                except Exception as e:
+                    logging.error(f"Error initializing model for session {self.session_id}: {e}")
+                    return
+
             if int(args.framelimit) > 0 and self.frame_counter > int(args.framestart) + int(args.framelimit):
                 return
             if self.frame_counter % int(args.fpsthrottle) == 0:
@@ -150,8 +164,9 @@ class YoloOpencvProcessor:
 
     # 检测函数，使用YOLO模型进行对象检测
     def detect(self):
+        logging.info('Detecting objects 图像 in frame ' + str(self.frame_counter))
         # Perform object detection on the input image
-        results = model(self.image)
+        results = self.model(self.image)
 
         # Extracting detections
         boxes = results[0].boxes.xyxy.cpu().numpy()  # Bounding box coordinates
